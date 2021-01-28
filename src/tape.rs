@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone)]
 pub struct Tape<Symbol>(BTreeMap<i64, Symbol>, i64, i64);
 
 impl<Sym> Default for Tape<Sym> {
@@ -36,6 +37,18 @@ impl<Sym> Tape<Sym> {
     pub fn iter_between(&self, first: i64, last: i64) -> impl Iterator<Item = &Sym> {
         assert!(first <= last);
         (first..last).filter_map(move |ref pos| self.0.get(pos))
+    }
+
+    pub fn iter_to(&self, to: i64) -> impl Iterator<Item = &Sym> {
+        (self.1..self.2)
+            .filter(move |pos| pos < &to)
+            .map(move |ref pos| self.0.get(pos).expect("Logic error in Tape min, max"))
+    }
+
+    pub fn iter_from(&self, from: i64) -> impl Iterator<Item = &Sym> {
+        (self.1..self.2)
+            .filter(move |pos| &from <= pos)
+            .map(move |ref pos| self.0.get(pos).expect("Logic error in Tape min, max"))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Sym> {
