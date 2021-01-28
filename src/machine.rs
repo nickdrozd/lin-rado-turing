@@ -1,10 +1,14 @@
-use std::io::Write;
-
 use crate::{
     program::Program,
     tape::Tape,
     types::{State, Symbol},
 };
+use itertools::Either;
+use std::{collections::BTreeMap, io::Write, usize};
+
+type Action<S, Sym> = (S, Sym);
+type Beeps<S> = BTreeMap<S, usize>;
+type Snapshots<S, Sym> = BTreeMap<Action<S, Sym>, Vec<(usize, usize, usize, Tape<Sym>, Beeps<S>)>>;
 
 pub struct Machine<State, Symbol> {
     prog: Program<State, Symbol>,
@@ -75,6 +79,58 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         }
     }
 
+    fn recurr_check_init() -> (Snapshots<S, Sym>, Vec<i64>) {
+        (BTreeMap::new(), vec![])
+    }
+
+    fn recurr_deviations(&self, deviations: Option<&mut Vec<i64>>, init: i64) {
+        if let Some(dev) = deviations {
+            dev.push(self.pos - init);
+        }
+    }
+
+    fn recurr_check(
+        &self,
+        step: usize,
+        snapshots: Option<&mut Snapshots<S, Sym>>,
+        deviations: Option<Vec<i64>>,
+        check: Option<usize>,
+    ) {
+        if let (Some(snaps), Some(deviations), Some(recur)) = (snapshots, deviations, check) {
+            if step >= recur {
+                let action = (self.state, self.read().copied().unwrap_or_else(Sym::zero));
+
+                let mut iter = if let Some(items) = snaps.get(&action) {
+                    Either::Right(items.iter())
+                } else {
+                    Either::Left(std::iter::empty())
+                };
+
+                loop {
+                    if let Some((pstep, pinit, pdev, ptape, pbeeps)) = iter.next() {}
+                }
+            }
+        }
+    }
+
+    fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize) {
+        let symbol = self.read().copied().unwrap_or_else(Sym::zero);
+        let state = self.state;
+
+        let &(new_state, symbol, direction) = self.prog.instruction(state, symbol);
+
+        Self::write_to_buffer(output, step, new_state, symbol);
+
+        self.state = new_state;
+
+        self.write(symbol);
+
+        match direction {
+            crate::types::Direction::Left => self.move_left(),
+            crate::types::Direction::Right => self.move_right(),
+        }
+    }
+
     pub fn run_until_halt<B: Write>(
         &mut self,
         input: Vec<Sym>,
@@ -82,26 +138,23 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         output: &mut Option<B>,
         check_recurrence: Option<usize>,
     ) {
+        let init = 0_i64;
+
         self.input_to_tape(input);
 
         Self::write_to_buffer(output, 0, self.state, Sym::zero());
 
+        let (mut snapshots, mut deviations) = if check_recurrence.is_some() {
+            let f = Self::recurr_check_init();
+            (Some(f.0), Some(f.1))
+        } else {
+            (None, None)
+        };
+
         for step in 1..=limit {
-            let symbol = self.read().copied().unwrap_or_else(Sym::zero);
-            let state = self.state;
+            self.recurr_deviations(deviations.as_mut(), init);
 
-            let &(new_state, symbol, direction) = self.prog.instruction(state, symbol);
-
-            Self::write_to_buffer(output, step, new_state, symbol);
-
-            self.state = new_state;
-
-            self.write(symbol);
-
-            match direction {
-                crate::types::Direction::Left => self.move_left(),
-                crate::types::Direction::Right => self.move_right(),
-            }
+            self.run_turing_step(output, step);
 
             // Checks for stopping
             if self.state == S::halt() {
