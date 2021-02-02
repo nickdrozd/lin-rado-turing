@@ -40,10 +40,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
     }
 
     pub fn marks(&self) -> usize {
-        self.tape
-            .iter()
-            .filter(|item| Sym::zero() != **item)
-            .count()
+        self.tape.iter().filter(|item| Sym::zero() != *item).count()
     }
 
     fn write(&mut self, symbol: Sym) {
@@ -117,14 +114,10 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                                 let dmax =
                                     deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
 
-                                let prev = ptape
-                                    .iter_to(*pinit as i64 + dmax)
-                                    .copied()
-                                    .collect::<Vec<_>>();
+                                let prev = ptape.iter_to(*pinit as i64 + dmax).collect::<Vec<_>>();
                                 let mut curr = self
                                     .tape
                                     .iter_to(init + dmax + dev - *pdev as i64)
-                                    .copied()
                                     .collect::<Vec<_>>();
 
                                 let mut first = vec![];
@@ -140,14 +133,11 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                                 let dmin =
                                     deviations[*pstep..].iter().min().copied().unwrap_or(dev);
 
-                                let prev = ptape
-                                    .iter_from(*pinit as i64 + dmin)
-                                    .copied()
-                                    .collect::<Vec<_>>();
+                                let prev =
+                                    ptape.iter_from(*pinit as i64 + dmin).collect::<Vec<_>>();
                                 let mut curr = self
                                     .tape
                                     .iter_from(init + dmin + dev - *pdev)
-                                    .copied()
                                     .collect::<Vec<_>>();
                                 for i in 0..prev.len() {
                                     if curr.get(i).is_none() {
@@ -164,16 +154,14 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
                                 let prev = ptape
                                     .iter_between(*pinit as i64 + dmin, *pinit as i64 + dmax)
-                                    .copied()
                                     .collect::<Vec<_>>();
                                 let curr = self
                                     .tape
                                     .iter_between(init + dmin, init + dmax)
-                                    .copied()
                                     .collect::<Vec<_>>();
                                 (prev, curr)
                             };
-
+                            println!("{:?} == {:?}", prev, curr);
                             if prev == curr {
                                 break Some((*pstep, step, pbeeps));
                             }
@@ -188,7 +176,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                     {
                         return Some(Halt::new(pstep, HaltReason::Recurr(step - pstep)));
                     } else {
-                        return Some(Halt::new(step, HaltReason::Quasihalt));
+                        return Some(Halt::new(step, HaltReason::Quasihalt(step - pstep)));
                     }
                 }
 
@@ -201,7 +189,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         None
     }
 
-    fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize) {
+    fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize, init: &mut i64) {
         let symbol = self.read().copied().unwrap_or_else(Sym::zero);
         let state = self.state;
 
@@ -214,7 +202,13 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         self.write(symbol);
 
         match direction {
-            crate::types::Direction::Left => self.move_left(),
+            crate::types::Direction::Left => {
+                if self.pos == 0 {
+                    *init += 1;
+                }
+                self.move_left();
+            
+            },
             crate::types::Direction::Right => self.move_right(),
         }
     }
@@ -226,7 +220,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         output: &mut Option<B>,
         check_recurrence: Option<usize>,
     ) {
-        let init = input.len() / 2;
+        let mut init = (input.len() / 2) as i64;
 
         self.pos = init as i64;
 
@@ -244,7 +238,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         };
 
         for step in 1..=limit {
-            let dev = self.recurr_deviations(deviations.as_mut(), init as i64);
+            let dev = self.recurr_deviations(deviations.as_mut(), init);
 
             self.recurr_check(
                 step,
@@ -256,7 +250,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                 dev,
             );
 
-            self.run_turing_step(output, step);
+            self.run_turing_step(output, step, &mut init);
 
             beeps.insert(self.state, step);
 
@@ -305,7 +299,7 @@ pub enum HaltReason {
     Halt,
     Recurr(usize),
     XLimit,
-    Quasihalt,
+    Quasihalt(usize),
 }
 
 pub fn run_machine<S: State, Sym: Symbol>(

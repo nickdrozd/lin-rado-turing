@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::types::Symbol;
+
 #[derive(Debug, Clone)]
 pub struct Tape<Symbol>(BTreeMap<i64, Symbol>, i64, i64);
 
@@ -9,7 +11,7 @@ impl<Sym> Default for Tape<Sym> {
     }
 }
 
-impl<Sym> Tape<Sym> {
+impl<Sym: Symbol> Tape<Sym> {
     pub fn min(&self) -> i64 {
         self.1
     }
@@ -34,25 +36,25 @@ impl<Sym> Tape<Sym> {
         self.0.insert(pos, symbol);
     }
 
-    pub fn iter_between(&self, first: i64, last: i64) -> impl Iterator<Item = &Sym> {
+    pub fn iter_between<'a>(&'a self, first: i64, last: i64) -> impl Iterator<Item = Sym> + 'a {
         assert!(first <= last);
-        (first..last).filter_map(move |ref pos| self.0.get(pos))
+        (first..last).map(move |ref pos| self.0.get(pos).copied().unwrap_or_else(Sym::zero))
     }
 
-    pub fn iter_to(&self, to: i64) -> impl Iterator<Item = &Sym> {
+    pub fn iter_to<'a>(&'a self, to: i64) -> impl Iterator<Item = Sym> + 'a {
         (self.1..self.2)
             .filter(move |pos| pos < &to)
-            .map(move |ref pos| self.0.get(pos).expect("Logic error in Tape min, max"))
+            .map(move |ref pos| self.0.get(pos).copied().unwrap_or_else(Sym::zero))
     }
 
-    pub fn iter_from(&self, from: i64) -> impl Iterator<Item = &Sym> {
+    pub fn iter_from<'a>(&'a self, from: i64) -> impl Iterator<Item = Sym> + 'a {
         (self.1..self.2)
             .filter(move |pos| &from <= pos)
-            .map(move |ref pos| self.0.get(pos).expect("Logic error in Tape min, max"))
+            .map(move |ref pos| self.0.get(pos).copied().unwrap_or_else(Sym::zero))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Sym> {
-        (self.1..self.2).map(move |ref pos| self.0.get(pos).expect("Logic error in Tape min, max"))
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Sym> + 'a {
+        (self.1..self.2).map(move |ref pos| self.0.get(pos).copied().unwrap_or_else(Sym::zero))
     }
 
     pub fn size(&self) -> usize {
@@ -79,7 +81,7 @@ mod tests {
 
         assert_eq!(
             tape.iter_between(-2, 0).collect::<Vec<_>>(),
-            vec![&TwoSymbol::One, &TwoSymbol::One]
+            vec![TwoSymbol::One, TwoSymbol::One]
         );
     }
 
