@@ -207,8 +207,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                     *init += 1;
                 }
                 self.move_left();
-            
-            },
+            }
             crate::types::Direction::Right => self.move_right(),
         }
     }
@@ -240,7 +239,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         for step in 1..=limit {
             let dev = self.recurr_deviations(deviations.as_mut(), init);
 
-            self.recurr_check(
+            self.halt = self.recurr_check(
                 step,
                 snapshots.as_mut(),
                 deviations.as_ref(),
@@ -249,6 +248,10 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                 &beeps,
                 dev,
             );
+
+            if self.halt.is_some() {
+                break;
+            }
 
             self.run_turing_step(output, step, &mut init);
 
