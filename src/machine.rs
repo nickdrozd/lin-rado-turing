@@ -88,7 +88,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
     }
 
     fn recurr_check(
-        &self,
+        &mut self,
         step: usize,
         snapshots: Option<&mut Snapshots<S, Sym>>,
         deviations: Option<&Vec<i64>>,
@@ -107,76 +107,77 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                     Either::Left(std::iter::empty())
                 };
 
-                if let Some((pstep, step, pbeeps)) = loop {
+                if let Some((pstep, step, pbeeps, ptape)) = loop {
                     if let Some((pstep, pinit, pdev, ptape, pbeeps)) = iter.next() {
-                        if let Some(dev) = deviations.last().copied() {
-                            let (prev, curr) = if dev < *pdev as i64 {
-                                let dmax =
-                                    deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
+                        let (prev, curr) = if dev < *pdev as i64 {
+                            let dmax =
+                                deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
 
-                                let prev = ptape.iter_to(*pinit as i64 + dmax).collect::<Vec<_>>();
-                                let mut curr = self
-                                    .tape
-                                    .iter_to(init + dmax + dev - *pdev as i64)
-                                    .collect::<Vec<_>>();
+                            let prev = ptape.iter_to(*pinit as i64 + dmax).collect::<Vec<_>>();
 
-                                let mut first = vec![];
-                                for i in 0..prev.len() {
-                                    if curr.get(i).is_none() {
-                                        first.push(Sym::zero());
-                                    }
+                            let mut curr = self
+                                .tape
+                                .iter_to(init + dmax + dev - *pdev as i64)
+                                .collect::<Vec<_>>();
+
+                            let mut first = vec![];
+                            for i in 0..prev.len() {
+                                if curr.get(i).is_none() {
+                                    first.push(Sym::zero());
                                 }
-
-                                first.append(&mut curr);
-                                (prev, first)
-                            } else if (*pdev as i64) < dev {
-                                let dmin =
-                                    deviations[*pstep..].iter().min().copied().unwrap_or(dev);
-
-                                let prev =
-                                    ptape.iter_from(*pinit as i64 + dmin).collect::<Vec<_>>();
-                                let mut curr = self
-                                    .tape
-                                    .iter_from(init + dmin + dev - *pdev)
-                                    .collect::<Vec<_>>();
-                                for i in 0..prev.len() {
-                                    if curr.get(i).is_none() {
-                                        curr.push(Sym::zero());
-                                    }
-                                }
-
-                                (prev, curr)
-                            } else {
-                                let dmax =
-                                    deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
-                                let dmin =
-                                    deviations[*pstep..].iter().min().copied().unwrap_or(dev);
-
-                                let prev = ptape
-                                    .iter_between(*pinit as i64 + dmin, *pinit as i64 + dmax)
-                                    .collect::<Vec<_>>();
-                                let curr = self
-                                    .tape
-                                    .iter_between(init + dmin, init + dmax)
-                                    .collect::<Vec<_>>();
-                                (prev, curr)
-                            };
-                            println!("{:?} == {:?}", prev, curr);
-                            if prev == curr {
-                                break Some((*pstep, step, pbeeps));
                             }
+
+                            first.append(&mut curr);
+                            (prev, first)
+                        } else if (*pdev as i64) < dev {
+                            let dmin = deviations[*pstep..].iter().min().copied().unwrap_or(dev);
+
+                            let prev = ptape.iter_from(*pinit as i64 + dmin).collect::<Vec<_>>();
+
+                            let mut curr = self
+                                .tape
+                                .iter_from(init + dmin + dev - *pdev)
+                                .collect::<Vec<_>>();
+
+                            for i in 0..prev.len() {
+                                if curr.get(i).is_none() {
+                                    curr.push(Sym::zero());
+                                }
+                            }
+
+                            (prev, curr)
+                        } else {
+                            let dmax =
+                                deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
+                            let dmin = deviations[*pstep..].iter().min().copied().unwrap_or(dev);
+
+                            let prev = ptape
+                                .iter_between(*pinit as i64 + dmin, *pinit as i64 + dmax)
+                                .collect::<Vec<_>>();
+
+                            let curr = self
+                                .tape
+                                .iter_between(init + dmin, init + dmax)
+                                .collect::<Vec<_>>();
+
+                            (prev, curr)
+                        };
+
+                        if prev == curr {
+                            break Some((*pstep, step, pbeeps, ptape));
                         }
                     } else {
                         break None;
                     }
                 } {
+                    self.tape = ptape.clone();
                     if pbeeps
                         .keys()
                         .all(|state| beeps.get(state) > pbeeps.get(state))
                     {
                         return Some(Halt::new(pstep, HaltReason::Recurr(step - pstep)));
                     } else {
-                        return Some(Halt::new(step, HaltReason::Quasihalt(step - pstep)));
+                        return Some(Halt::new(pstep, HaltReason::Quasihalt(step - pstep)));
                     }
                 }
 
@@ -189,13 +190,37 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         None
     }
 
+    fn write_tape<B: Write>(&self, output: &mut Option<B>, init: i64) {
+        let mut buffer = String::with_capacity(20);
+
+        let tape_iter = self.tape.iter_between(init - 30, init + 30);
+
+        for (s, idx) in tape_iter.zip((init - 30)..(init + 30)) {
+            if idx == self.pos {
+                buffer.push_str("[");
+            }
+            if s == Sym::zero() {
+                buffer.push_str("_");
+            } else {
+                buffer.push_str("#");
+            }
+            if idx == self.pos {
+                buffer.push_str("]")
+            }
+        }
+
+        if let Some(b) = output {
+            writeln!(b, "{}", buffer).unwrap();
+        }
+    }
+
     fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize, init: &mut i64) {
         let symbol = self.read().copied().unwrap_or_else(Sym::zero);
         let state = self.state;
 
-        let &(new_state, symbol, direction) = self.prog.instruction(state, symbol);
+        Self::write_to_buffer(output, step, state, symbol);
 
-        Self::write_to_buffer(output, step, new_state, symbol);
+        let &(new_state, symbol, direction) = self.prog.instruction(state, symbol);
 
         self.state = new_state;
 
@@ -203,9 +228,6 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
         match direction {
             crate::types::Direction::Left => {
-                if self.pos == 0 {
-                    *init += 1;
-                }
                 self.move_left();
             }
             crate::types::Direction::Right => self.move_right(),
@@ -221,13 +243,11 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
     ) {
         let mut init = (input.len() / 2) as i64;
 
-        self.pos = init as i64;
+        self.pos = init;
 
         let mut beeps: Beeps<S> = BTreeMap::new();
 
         self.input_to_tape(input);
-
-        Self::write_to_buffer(output, 0, self.state, Sym::zero());
 
         let (mut snapshots, mut deviations) = if check_recurrence.is_some() {
             let f = Self::recurr_check_init();
@@ -236,7 +256,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
             (None, None)
         };
 
-        for step in 1..=limit {
+        for step in 0..=limit {
             let dev = self.recurr_deviations(deviations.as_mut(), init);
 
             self.halt = self.recurr_check(
@@ -248,10 +268,11 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                 &beeps,
                 dev,
             );
-
             if self.halt.is_some() {
                 break;
             }
+
+            self.write_tape(output, init);
 
             self.run_turing_step(output, step, &mut init);
 
@@ -259,7 +280,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
             // Checks for stopping
             if self.state == S::halt() {
-                self.halt = Some(Halt::new(step, HaltReason::Halt));
+                self.halt = Some(Halt::new(step + 1, HaltReason::Halt));
                 break;
             }
         }
