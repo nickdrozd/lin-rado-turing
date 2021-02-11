@@ -68,7 +68,9 @@ fn assert_machine<S: State, Sym: Symbol>(
 ) {
     let mut machine = Machine::new(prog);
 
-    machine.run_until_halt::<std::io::Stdout>(vec![], 100000, &mut None, Some(0));
+    let check = if steps > 256 { Some(256) } else { Some(0) };
+
+    machine.run_until_halt::<std::io::Stdout>(vec![], steps + 1, &mut None, check);
 
     let halt = machine.halt();
 
