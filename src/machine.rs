@@ -214,7 +214,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         }
     }
 
-    fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize, init: &mut i64) {
+    fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize) {
         let symbol = self.read().copied().unwrap_or_else(Sym::zero);
         let state = self.state;
 
@@ -241,7 +241,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         output: &mut Option<B>,
         check_recurrence: Option<usize>,
     ) {
-        let mut init = (input.len() / 2) as i64;
+        let init = (input.len() / 2) as i64;
 
         self.pos = init;
 
@@ -274,7 +274,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
             self.write_tape(output, init);
 
-            self.run_turing_step(output, step, &mut init);
+            self.run_turing_step(output, step);
 
             beeps.insert(self.state, step);
 
