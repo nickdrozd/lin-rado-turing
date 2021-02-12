@@ -65,17 +65,6 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         }
     }
 
-    fn write_to_buffer<B: Write>(output: &mut Option<B>, step: usize, new_state: S, symbol: Sym) {
-        if let Some(buffer) = output {
-            writeln!(
-                buffer,
-                "step: {}: state={:?}, symbol: {:?}",
-                step, new_state, symbol
-            )
-            .expect("Failed to write to stdout");
-        }
-    }
-
     fn recurr_check_init() -> (Snapshots<S, Sym>, Vec<i64>) {
         (BTreeMap::new(), vec![])
     }
@@ -98,9 +87,8 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         dev: i64,
     ) -> Option<Halt> {
         if let (Some(snaps), Some(deviations), Some(recur)) = (snapshots, deviations, check) {
+            let action = (self.state, self.read().copied().unwrap_or_else(Sym::zero));
             if step >= recur {
-                let action = (self.state, self.read().copied().unwrap_or_else(Sym::zero));
-
                 let mut iter = if let Some(items) = snaps.get(&action) {
                     Either::Right(items.iter())
                 } else {
@@ -180,18 +168,17 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                         return Some(Halt::new(pstep, HaltReason::Quasihalt(step - pstep)));
                     }
                 }
-
-                snaps
+            }
+            snaps
                     .entry(action)
                     .and_modify(|v| v.push((step, init, dev, self.tape.clone(), beeps.clone())))
                     .or_insert_with(|| vec![(step, init, dev, self.tape.clone(), beeps.clone())]);
-            }
         }
         None
     }
 
-    fn write_tape<B: Write>(&self, output: &mut Option<B>, init: i64) {
-        let mut buffer = String::with_capacity(20);
+    fn write_tape<B: Write>(&self, output: &mut Option<B>, step: usize, init: i64) {
+        let mut buffer = format!("{:8} {:?}  ", step, self.state);
 
         let tape_iter = self.tape.iter_between(init - 30, init + 30);
 
@@ -199,11 +186,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
             if idx == self.pos {
                 buffer.push_str("[");
             }
-            if s == Sym::zero() {
-                buffer.push_str("_");
-            } else {
-                buffer.push_str("#");
-            }
+            buffer.push_str(&s.to_string());
             if idx == self.pos {
                 buffer.push_str("]")
             }
@@ -214,11 +197,9 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         }
     }
 
-    fn run_turing_step<B: Write>(&mut self, output: &mut Option<B>, step: usize) {
+    fn run_turing_step(&mut self) {
         let symbol = self.read().copied().unwrap_or_else(Sym::zero);
         let state = self.state;
-
-        Self::write_to_buffer(output, step, state, symbol);
 
         let &(new_state, symbol, direction) = self.prog.instruction(state, symbol);
 
@@ -257,6 +238,8 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         };
 
         for step in 0..=limit {
+            self.write_tape(output, step, init);
+            
             let dev = self.recurr_deviations(deviations.as_mut(), init);
 
             self.halt = self.recurr_check(
@@ -272,11 +255,10 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                 break;
             }
 
-            self.write_tape(output, init);
-
-            self.run_turing_step(output, step);
 
             beeps.insert(self.state, step);
+            self.run_turing_step();
+
 
             // Checks for stopping
             if self.state == S::halt() {
