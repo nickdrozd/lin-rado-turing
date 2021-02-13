@@ -45,11 +45,11 @@ const QUASIHALTING: &[(&str, usize, usize, usize, &str)] = &[
     ),
     // 2/4
     ("1RB 2RB 1LB 1LA 1LB 3RA 3LA 2RB", 3340, 2333909, 1, "2-4"),
-    // ("1RB 2RB 3LA 2RA 1LB 1LA 1LB 3RB", 63, 22465, 1, "2-4"), // QH 22402  Commentted out are off by 1, mine one less
-    // ("1RB 2LA 1RA 1LA 2LB 3LA 2RB 2RA", 107, 10459, 3, "2-4"), // QH 10353
+    ("1RB 2RB 3LA 2RA 1LB 1LA 1LB 3RB", 63, 22465, 1, "2-4"), // QH 22402  Commentted out are off by 1, mine one less
+    ("1RB 2LA 1RA 1LA 2LB 3LA 2RB 2RA", 107, 10459, 3, "2-4"), // QH 10353
     ("1RB 2LA 1RA 1LA 3LA 1LB 2RB 2RA", 90, 7193, 2, "2-4"), // QH 7106
     ("1RB 2LA 1RA 1LA 3LA 1LB 2RB 2LA", 84, 6443, 2, "2-4"), // QH 6362
-                                                             // ("1RB 2RB 1LA 1LA 2LB 2RA 3LB 1LA", 63, 4068, 1, "2-4"),  // QH 4005
+    ("1RB 2RB 1LA 1LA 2LB 2RA 3LB 1LA", 63, 4068, 1, "2-4"),  // QH 4005
 ];
 
 #[test]
@@ -69,7 +69,7 @@ fn assert_machine<S: State, Sym: Symbol>(
     let mut machine = Machine::new(prog);
 
     let check = if steps > 256 {
-        Some(steps - 3 * period)
+        Some(steps)
     } else {
         Some(0)
     };

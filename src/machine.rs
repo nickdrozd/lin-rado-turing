@@ -8,12 +8,12 @@ use std::{collections::BTreeMap, io::Write};
 
 type Action<S, Sym> = (S, Sym);
 type Beeps<S> = BTreeMap<S, usize>;
-type Snapshots<S, Sym> = BTreeMap<Action<S, Sym>, Vec<(usize, i64, i64, Tape<Sym>, Beeps<S>)>>;
+type Snapshots<S, Sym> = BTreeMap<Action<S, Sym>, Vec<(usize, usize, i64, Tape<Sym>, Beeps<S>)>>;
 
 pub struct Machine<State, Symbol> {
     prog: Program<State, Symbol>,
     state: State,
-    pos: i64,
+    pos: usize,
     tape: Tape<Symbol>,
 
     halt: Option<Halt>,
@@ -61,7 +61,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
     fn input_to_tape(&mut self, input: Vec<Sym>) {
         for (i, s) in input.into_iter().enumerate() {
-            self.tape.write(i as i64, s);
+            self.tape.write(i, s);
         }
     }
 
@@ -69,11 +69,11 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         (BTreeMap::new(), vec![])
     }
 
-    fn recurr_deviations(&self, deviations: Option<&mut Vec<i64>>, init: i64) -> i64 {
+    fn recurr_deviations(&self, deviations: Option<&mut Vec<i64>>, init: usize) -> i64 {
         if let Some(dev) = deviations {
-            dev.push(self.pos - init);
+            dev.push(self.pos as i64 - init as i64);
         }
-        self.pos - init
+        self.pos as i64 - init as i64
     }
 
     fn recurr_check(
@@ -82,7 +82,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         snapshots: Option<&mut Snapshots<S, Sym>>,
         deviations: Option<&Vec<i64>>,
         check: Option<usize>,
-        init: i64,
+        init: usize,
         beeps: &Beeps<S>,
         dev: i64,
     ) -> Option<Halt> {
@@ -97,15 +97,16 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
                 if let Some((pstep, step, pbeeps, ptape)) = loop {
                     if let Some((pstep, pinit, pdev, ptape, pbeeps)) = iter.next() {
-                        let (prev, curr) = if dev < *pdev as i64 {
+                        
+                        let (prev, curr) = if dev < *pdev {
                             let dmax =
                                 deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
 
-                            let prev = ptape.iter_to(*pinit as i64 + dmax).collect::<Vec<_>>();
+                            let prev = ptape.iter_to((*pinit as i64 + dmax) as usize).collect::<Vec<_>>();
 
                             let mut curr = self
                                 .tape
-                                .iter_to(init + dmax + dev - *pdev as i64)
+                                .iter_to((init as i64 + dmax + dev - *pdev) as usize)
                                 .collect::<Vec<_>>();
 
                             let mut first = vec![];
@@ -117,14 +118,29 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
                             first.append(&mut curr);
                             (prev, first)
-                        } else if (*pdev as i64) < dev {
+                        } else if (*pdev) < dev {
                             let dmin = deviations[*pstep..].iter().min().copied().unwrap_or(dev);
 
-                            let prev = ptape.iter_from(*pinit as i64 + dmin).collect::<Vec<_>>();
+                            let from_prev = if *pinit as i64 + dmin < 0 {
+                                0
+                            } else {
+                                *pinit as i64 + dmin
+                            };
+
+
+                            let prev = ptape.iter_from(from_prev as usize).collect::<Vec<_>>();
+
+                    
+                            let from_curr = if init as i64 + dmin + dev - pdev < 0 {
+                                0
+                            } else {
+                                init as i64 + dmin + dev - pdev
+                            };
+
 
                             let mut curr = self
                                 .tape
-                                .iter_from(init + dmin + dev - *pdev)
+                                .iter_from(from_curr as usize)
                                 .collect::<Vec<_>>();
 
                             for i in 0..prev.len() {
@@ -138,14 +154,26 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                             let dmax =
                                 deviations[*pstep..].iter().max().copied().unwrap_or(dev) + 1;
                             let dmin = deviations[*pstep..].iter().min().copied().unwrap_or(dev);
+                            
+                            let from_prev = if *pinit as i64 + dmin < 0 {
+                                0
+                            } else {
+                                *pinit as i64 + dmin
+                            };
 
                             let prev = ptape
-                                .iter_between(*pinit as i64 + dmin, *pinit as i64 + dmax)
+                                .iter_between(from_prev as usize, (*pinit as i64 + dmax) as usize)
                                 .collect::<Vec<_>>();
+                        
+                            let from_curr = if init as i64 + dmin < 0 {
+                                0
+                            } else {
+                                init as i64 + dmin
+                            };
 
                             let curr = self
                                 .tape
-                                .iter_between(init + dmin, init + dmax)
+                                .iter_between(from_curr as usize, (init as i64 + dmax) as usize)
                                 .collect::<Vec<_>>();
 
                             (prev, curr)
@@ -168,21 +196,26 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                         return Some(Halt::new(pstep, HaltReason::Quasihalt(step - pstep)));
                     }
                 }
-            }
-            snaps
+                
+                
+                snaps
                     .entry(action)
                     .and_modify(|v| v.push((step, init, dev, self.tape.clone(), beeps.clone())))
                     .or_insert_with(|| vec![(step, init, dev, self.tape.clone(), beeps.clone())]);
+            
+            }
+
+            
         }
         None
     }
 
-    fn write_tape<B: Write>(&self, output: &mut Option<B>, step: usize, init: i64) {
+    fn write_tape<B: Write>(&self, output: &mut Option<B>, step: usize, init: usize) {
         let mut buffer = format!("{:8} {:?}  ", step, self.state);
 
-        let tape_iter = self.tape.iter_between(init - 30, init + 30);
+        let tape_iter = self.tape.iter_from(init);
 
-        for (s, idx) in tape_iter.zip((init - 30)..(init + 30)) {
+        for (s, idx) in tape_iter.zip(0..30) {
             if idx == self.pos {
                 buffer.push_str("[");
             }
@@ -197,7 +230,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         }
     }
 
-    fn run_turing_step(&mut self) {
+    fn run_turing_step(&mut self, init: &mut usize) {
         let symbol = self.read().copied().unwrap_or_else(Sym::zero);
         let state = self.state;
 
@@ -209,7 +242,13 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
         match direction {
             crate::types::Direction::Left => {
-                self.move_left();
+                if self.pos == 0 {
+                    *init += 1;
+                    self.tape.insert();
+                } else {
+                
+                    self.move_left();
+                }
             }
             crate::types::Direction::Right => self.move_right(),
         }
@@ -222,7 +261,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         output: &mut Option<B>,
         check_recurrence: Option<usize>,
     ) {
-        let init = (input.len() / 2) as i64;
+        let mut init = input.len() / 2;
 
         self.pos = init;
 
@@ -247,7 +286,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
                 snapshots.as_mut(),
                 deviations.as_ref(),
                 check_recurrence,
-                init as i64,
+                init,
                 &beeps,
                 dev,
             );
@@ -257,7 +296,7 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
 
 
             beeps.insert(self.state, step);
-            self.run_turing_step();
+            self.run_turing_step(&mut init);
 
 
             // Checks for stopping
