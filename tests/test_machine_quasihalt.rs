@@ -68,11 +68,7 @@ fn assert_machine<S: State, Sym: Symbol>(
 ) {
     let mut machine = Machine::new(prog);
 
-    let check = if steps > 256 {
-        Some(steps)
-    } else {
-        Some(0)
-    };
+    let check = Some(steps);
 
     machine.run_until_halt::<std::io::Stdout>(vec![], steps + 2 * period, &mut None, check);
 
@@ -82,11 +78,7 @@ fn assert_machine<S: State, Sym: Symbol>(
 
     let halt = halt.unwrap();
 
-    assert_eq!(halt.reason, HaltReason::Quasihalt(period));
-
-    assert_eq!(halt.steps, steps);
-
-    assert_eq!(machine.marks(), marks);
+    assert_eq!((machine.marks(), halt.steps, halt.reason), (marks, steps, HaltReason::Quasihalt(period)));
 
 }
 

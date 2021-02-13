@@ -213,9 +213,9 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
     fn write_tape<B: Write>(&self, output: &mut Option<B>, step: usize, init: usize) {
         let mut buffer = format!("{:8} {:?}  ", step, self.state);
 
-        let tape_iter = self.tape.iter_from(init);
+        let tape_iter = self.tape.iter();
 
-        for (s, idx) in tape_iter.zip(0..30) {
+        for (idx, s) in tape_iter.enumerate() {
             if idx == self.pos {
                 buffer.push_str("[");
             }

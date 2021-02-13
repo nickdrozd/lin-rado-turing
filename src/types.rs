@@ -199,8 +199,8 @@ impl Symbol for TwoSymbol {
 impl ToString for TwoSymbol {
     fn to_string(&self) -> String {
         match self {
-            TwoSymbol::One => "1".to_owned(),
-            TwoSymbol::Zero => "0".to_owned(),
+            TwoSymbol::One => "#".to_owned(),
+            TwoSymbol::Zero => "_".to_owned(),
         }
     }
 }

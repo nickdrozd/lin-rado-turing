@@ -9,7 +9,7 @@ pub struct Tape<Symbol>(Vec<Symbol>);
 
 impl<Sym: Symbol> Default for Tape<Sym> {
     fn default() -> Self {
-        Tape((0..182).map(|_| Sym::zero()).collect::<Vec<_>>())
+        Tape((0..500).map(|_| Sym::zero()).collect::<Vec<_>>())
     }
 }
 
@@ -31,11 +31,11 @@ impl<Sym: Symbol> Tape<Sym> {
     }
 
     pub fn iter_between<'a>(&'a self, first: usize, last: usize) -> impl Iterator<Item = Sym> + 'a {
-        self.0[first..last].iter().cloned()
+        self.0[first..last.min(self.size() - 1)].iter().cloned()
     }
 
     pub fn iter_to<'a>(&'a self, to: usize) -> impl Iterator<Item = Sym> + 'a {
-        self.0[..to].iter().cloned()
+        self.0[..to.min(self.size() - 1)].iter().cloned()
     }
 
     pub fn iter_from<'a>(&'a self, from: usize) -> impl Iterator<Item = Sym> + 'a {

@@ -104,7 +104,7 @@ fn assert_machine<S: State, Sym: Symbol>(
 ) {
     let mut machine = Machine::new(prog);
 
-    let check = Some(steps);
+    let check = Some(0);
 
     machine.run_until_halt::<std::io::Stdout>(vec![], steps + 2 * period, &mut None, check);
 
