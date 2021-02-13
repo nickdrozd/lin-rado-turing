@@ -261,13 +261,14 @@ impl<S: State, Sym: Symbol> Machine<S, Sym> {
         output: &mut Option<B>,
         check_recurrence: Option<usize>,
     ) {
-        let mut init = input.len() / 2;
+
+
+        self.input_to_tape(input);
+        let mut init = self.tape.size() / 2;
 
         self.pos = init;
 
         let mut beeps: Beeps<S> = BTreeMap::new();
-
-        self.input_to_tape(input);
 
         let (mut snapshots, mut deviations) = if check_recurrence.is_some() {
             let f = Self::recurr_check_init();
